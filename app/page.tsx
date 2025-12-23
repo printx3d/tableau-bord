@@ -12,7 +12,8 @@ const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRcYQCI6W
 const STORAGE_KEY = 'print3d_orders';
 const STATUS_KEY = 'print3d_status';
 const AUTH_KEY = 'print3d_auth';
-const SECRET_PASSWORD = 'PRINT3D2025';
+// Lecture du secret depuis la variable d'environnement (accessible côté client)
+const SECRET_PASSWORD = process.env.NEXT_PUBLIC_DASHBOARD_PASSWORD;
 
 // COÛT FIXE ET BÉNÉFICE MARGE
 const FIXED_COST = 3.00;
@@ -233,7 +234,6 @@ export default function Dashboard() {
 
   if (!isAuthenticated) {
     return (
-        // Code d'authentification inchangé...
       <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
           <div className="text-center mb-8">
@@ -272,14 +272,16 @@ export default function Dashboard() {
       {/* Sidebar */}
       <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
         
-        {/* NOUVELLE SECTION : Graphique des Statuts */}
-        <div className="p-4 border-b border-gray-200">
-            <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center space-x-2">
-                <TrendingUp className="w-4 h-4 text-purple-600" />
-                <span>Statut des Commandes ({stats.totalOrders})</span>
-            </h3>
-            <OrderCountChart counts={stats.counts} statuses={statuses} totalOrders={stats.totalOrders} />
-        </div>
+        {/* NOUVELLE SECTION : Graphique des Statuts (Affiché seulement si totalOrders > 0) */}
+        {stats.totalOrders > 0 && (
+            <div className="p-4 border-b border-gray-200">
+                <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center space-x-2">
+                    <TrendingUp className="w-4 h-4 text-purple-600" />
+                    <span>Statut des Commandes ({stats.totalOrders})</span>
+                </h3>
+                <OrderCountChart counts={stats.counts} statuses={statuses} totalOrders={stats.totalOrders} />
+            </div>
+        )}
         
         {/* Sidebar Navigation */}
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
@@ -522,10 +524,10 @@ export default function Dashboard() {
 
 // --- SOUS-COMPOSANTS ---
 
-// Nouveau composant pour le graphique à barres dans la sidebar
+// Composant OrderCountChart modifié pour ne rien retourner si totalOrders est 0
 function OrderCountChart({ counts, statuses, totalOrders }: { counts: Record<string, number>, statuses: StatusItem[], totalOrders: number }) {
     if (totalOrders === 0) {
-        return <p className="text-center text-sm text-gray-500 py-4">Aucune donnée de commande.</p>;
+        return null; // Retourne null pour ne rien afficher
     }
 
     const maxCount = Math.max(...Object.values(counts));
@@ -534,8 +536,10 @@ function OrderCountChart({ counts, statuses, totalOrders }: { counts: Record<str
         <div className="space-y-3">
             {statuses.map(status => {
                 const count = counts[status.id] || 0;
-                const percentage = totalOrders > 0 ? (count / maxCount) * 100 : 0;
-                const displayPercentage = totalOrders > 0 ? ((count / totalOrders) * 100).toFixed(0) : 0;
+                // Calcul du pourcentage basé sur la commande la plus nombreuse pour la longueur de la barre (maxCount)
+                const percentage = totalOrders > 0 ? (count / maxCount) * 100 : 0; 
+                // Calcul du pourcentage basé sur le total des commandes pour l'affichage (totalOrders)
+                const displayPercentage = totalOrders > 0 ? ((count / totalOrders) * 100).toFixed(0) : 0; 
                 
                 return (
                     <div key={status.id} className="text-xs">

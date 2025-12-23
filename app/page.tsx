@@ -18,7 +18,7 @@ const SECRET_PASSWORD = 'PRINT3D2025';
 const FIXED_COST = 3.00;
 const PROFIT_MARGIN = 0.50;
 
-// --- TYPESCRIPT INTERFACE (CORRECTION 1) ---
+// --- TYPESCRIPT INTERFACE ---
 interface Order {
   id: string;
   timestamp: string;
@@ -31,14 +31,20 @@ interface Order {
   color: string;
   material: string;
   delivery: string;
-  total: number; // DOIT ÊTRE number
+  total: number;
   paymentMethod: string;
   status: string;
   profit: number;
 }
 
+interface StatusItem {
+    id: string;
+    label: string;
+    icon: React.ElementType;
+    color: string;
+}
 
-const statuses = [
+const statuses: StatusItem[] = [
   { id: 'pending', label: 'En attente', icon: Clock, color: 'bg-yellow-500' },
   { id: 'in_production', label: 'En production', icon: Package, color: 'bg-blue-500' },
   { id: 'quality_check', label: 'Contrôle qualité', icon: CheckCircle, color: 'bg-purple-500' },
@@ -65,7 +71,6 @@ const calculateProfit = (total: number): number => {
 export default function Dashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
-  // CORRECTION 2 : Spécifier que orders est un tableau d'objets Order
   const [orders, setOrders] = useState<Order[]>([]); 
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null); 
@@ -82,7 +87,7 @@ export default function Dashboard() {
     }
   }, []);
 
-  // Fonction de parsing CSV (CORRECTION 3 : Déclarer le type de retour Order[])
+  // Fonction de parsing CSV
   const parseCSV = (csvText: string): Order[] => {
     const lines = csvText.split('\n').filter(line => line.trim());
     if (lines.length <= 1) return [];
@@ -91,7 +96,7 @@ export default function Dashboard() {
     const parsedOrders: Order[] = []; 
 
     for (let i = 1; i < lines.length; i++) {
-        // Utilisation d'une regex pour gérer les valeurs entre guillemets contenant des virgules
+        // Regex robuste pour gérer les valeurs entre guillemets contenant des virgules
         const values = lines[i].match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || [];
         const cleanValues = values.map(v => v.trim().replace(/^"|"$/g, ''));
         
@@ -99,7 +104,7 @@ export default function Dashboard() {
             const total = cleanAndParseTotal(cleanValues[11]);
             const orderId = cleanValues[1];
 
-            const order: Order = { // Assigne explicitement le type Order
+            const order: Order = {
                 id: orderId,
                 timestamp: cleanValues[0],
                 customerName: cleanValues[2],
@@ -114,11 +119,12 @@ export default function Dashboard() {
                 total: total, 
                 paymentMethod: cleanValues[12],
                 status: savedStatuses[orderId] || 'pending',
-                profit: calculateProfit(total) // Calcul du profit
+                profit: calculateProfit(total)
             };
             parsedOrders.push(order);
         }
     }
+    // Retourne les commandes du plus récent au plus ancien (index du CSV croissant)
     return parsedOrders.reverse();
   };
 
@@ -164,7 +170,7 @@ export default function Dashboard() {
     }
   };
 
-  // Charger les données au montage et toutes les 2 minutes
+  // Chargement initial et intervalle
   useEffect(() => {
     if (isAuthenticated) {
       loadFromGoogleSheets(); 
@@ -202,6 +208,7 @@ export default function Dashboard() {
     localStorage.setItem(STATUS_KEY, JSON.stringify(savedStatuses));
   };
 
+  // Filtres et Statistiques
   const filteredOrders = useMemo(() => orders.filter(order => {
     const matchesStatus = selectedStatus === 'all' || order.status === selectedStatus;
     const matchesSearch = order.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -226,6 +233,7 @@ export default function Dashboard() {
 
   if (!isAuthenticated) {
     return (
+        // Code d'authentification inchangé...
       <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
           <div className="text-center mb-8">
@@ -263,19 +271,16 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
       <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
-        {/* Sidebar Header */}
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center space-x-3">
-            <div className="bg-gradient-to-r from-blue-600 to-purple-600 w-10 h-10 rounded-lg flex items-center justify-center">
-              <Package className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h2 className="font-bold text-gray-800">Print3D</h2>
-              <p className="text-xs text-gray-500">Dashboard</p>
-            </div>
-          </div>
+        
+        {/* NOUVELLE SECTION : Graphique des Statuts */}
+        <div className="p-4 border-b border-gray-200">
+            <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center space-x-2">
+                <TrendingUp className="w-4 h-4 text-purple-600" />
+                <span>Statut des Commandes ({stats.totalOrders})</span>
+            </h3>
+            <OrderCountChart counts={stats.counts} statuses={statuses} totalOrders={stats.totalOrders} />
         </div>
-
+        
         {/* Sidebar Navigation */}
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
           <button
@@ -516,6 +521,41 @@ export default function Dashboard() {
 }
 
 // --- SOUS-COMPOSANTS ---
+
+// Nouveau composant pour le graphique à barres dans la sidebar
+function OrderCountChart({ counts, statuses, totalOrders }: { counts: Record<string, number>, statuses: StatusItem[], totalOrders: number }) {
+    if (totalOrders === 0) {
+        return <p className="text-center text-sm text-gray-500 py-4">Aucune donnée de commande.</p>;
+    }
+
+    const maxCount = Math.max(...Object.values(counts));
+
+    return (
+        <div className="space-y-3">
+            {statuses.map(status => {
+                const count = counts[status.id] || 0;
+                const percentage = totalOrders > 0 ? (count / maxCount) * 100 : 0;
+                const displayPercentage = totalOrders > 0 ? ((count / totalOrders) * 100).toFixed(0) : 0;
+                
+                return (
+                    <div key={status.id} className="text-xs">
+                        <div className="flex justify-between items-center mb-1">
+                            <span className="text-gray-700">{status.label}</span>
+                            <span className="font-semibold text-gray-600">{count} ({displayPercentage}%)</span>
+                        </div>
+                        <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                            <div 
+                                className={`h-full ${status.color}`}
+                                style={{ width: `${percentage}%`, transition: 'width 0.5s ease-in-out' }}
+                            ></div>
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
 
 function StatCard({ title, value, icon: Icon, color, subtitle }: { title: string, value: string | number, icon: React.ElementType, color: string, subtitle?: string }) {
     const colorClasses: Record<string, string> = {

@@ -12,8 +12,9 @@ const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRcYQCI6W
 const STORAGE_KEY = 'print3d_orders';
 const STATUS_KEY = 'print3d_status';
 const AUTH_KEY = 'print3d_auth';
-// Lecture du secret depuis la variable d'environnement (accessible côté client)
-const SECRET_PASSWORD = process.env.NEXT_PUBLIC_DASHBOARD_PASSWORD;
+
+// IMPORTANT : Maintenant lu via process.env.NEXT_PUBLIC_DASHBOARD_PASSWORD
+const SECRET_PASSWORD = process.env.NEXT_PUBLIC_DASHBOARD_PASSWORD; 
 
 // COÛT FIXE ET BÉNÉFICE MARGE
 const FIXED_COST = 3.00;
@@ -182,6 +183,7 @@ export default function Dashboard() {
 
   const handleLogin = (e: React.FormEvent) => { 
     e.preventDefault();
+    // Le mot de passe est lu ici depuis la variable d'environnement Vercel/Next.js
     if (password === SECRET_PASSWORD) {
       setIsAuthenticated(true);
       localStorage.setItem(AUTH_KEY, 'true');
@@ -279,6 +281,7 @@ export default function Dashboard() {
                     <TrendingUp className="w-4 h-4 text-purple-600" />
                     <span>Statut des Commandes ({stats.totalOrders})</span>
                 </h3>
+                {/* L'OrderCountChart masque maintenant les statuts avec un count de 0 */}
                 <OrderCountChart counts={stats.counts} statuses={statuses} totalOrders={stats.totalOrders} />
             </div>
         )}
@@ -524,22 +527,23 @@ export default function Dashboard() {
 
 // --- SOUS-COMPOSANTS ---
 
-// Composant OrderCountChart modifié pour ne rien retourner si totalOrders est 0
+// Composant OrderCountChart modifié pour masquer les statuts avec un count de 0
 function OrderCountChart({ counts, statuses, totalOrders }: { counts: Record<string, number>, statuses: StatusItem[], totalOrders: number }) {
     if (totalOrders === 0) {
-        return null; // Retourne null pour ne rien afficher
+        return null; // Ne rend rien si le total est 0
     }
 
-    const maxCount = Math.max(...Object.values(counts));
+    const relevantStatuses = statuses.filter(status => counts[status.id] > 0);
+    const maxCount = Math.max(...relevantStatuses.map(status => counts[status.id]), 1); // Évite la division par zéro
 
     return (
         <div className="space-y-3">
-            {statuses.map(status => {
-                const count = counts[status.id] || 0;
-                // Calcul du pourcentage basé sur la commande la plus nombreuse pour la longueur de la barre (maxCount)
-                const percentage = totalOrders > 0 ? (count / maxCount) * 100 : 0; 
-                // Calcul du pourcentage basé sur le total des commandes pour l'affichage (totalOrders)
-                const displayPercentage = totalOrders > 0 ? ((count / totalOrders) * 100).toFixed(0) : 0; 
+            {relevantStatuses.map(status => {
+                const count = counts[status.id];
+                // Calcul du pourcentage basé sur la commande la plus nombreuse (maxCount) pour la longueur de la barre
+                const percentage = (count / maxCount) * 100; 
+                // Calcul du pourcentage basé sur le total des commandes pour l'affichage
+                const displayPercentage = ((count / totalOrders) * 100).toFixed(0); 
                 
                 return (
                     <div key={status.id} className="text-xs">

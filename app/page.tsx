@@ -1,13 +1,42 @@
 "use client";
-import React, { useState, useEffect } from 'react';
-import { Package, TrendingUp, Clock, CheckCircle, XCircle, Truck, User, Mail, Phone, MapPin, CreditCard, Calendar, RefreshCw, AlertCircle } from 'lucide-react';
 
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Package, TrendingUp, Clock, CheckCircle, XCircle, Truck, 
+  User, Mail, Phone, MapPin, CreditCard, Calendar, RefreshCw, AlertCircle, DollarSign
+} from 'lucide-react';
+
+// --- CONFIGURATION ---
 const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRcYQCI6W3JQDsGT3Sn0P1n5r8tiOEsYrnT08kOxyW_ZsFZvT3DR5WeaUshn_1Qtp6lWuTsW4HpdWPj/pub?output=csv';
 
 const STORAGE_KEY = 'print3d_orders';
 const STATUS_KEY = 'print3d_status';
 const AUTH_KEY = 'print3d_auth';
 const SECRET_PASSWORD = 'PRINT3D2025';
+
+// COÛT FIXE ET BÉNÉFICE MARGE
+const FIXED_COST = 3.00;
+const PROFIT_MARGIN = 0.50;
+
+// --- TYPESCRIPT INTERFACE (CORRECTION 1) ---
+interface Order {
+  id: string;
+  timestamp: string;
+  customerName: string;
+  email: string;
+  phone: string;
+  address: string;
+  product: string;
+  quantity: number;
+  color: string;
+  material: string;
+  delivery: string;
+  total: number; // DOIT ÊTRE number
+  paymentMethod: string;
+  status: string;
+  profit: number;
+}
+
 
 const statuses = [
   { id: 'pending', label: 'En attente', icon: Clock, color: 'bg-yellow-500' },
@@ -19,18 +48,33 @@ const statuses = [
   { id: 'cancelled', label: 'Annulé', icon: XCircle, color: 'bg-red-500' }
 ];
 
+// Fonction utilitaire pour nettoyer et convertir les totaux en nombre
+const cleanAndParseTotal = (totalString: string): number => {
+  if (!totalString) return 0;
+  const cleaned = totalString.replace(/[^0-9,.]/g, '').replace(',', '.');
+  return parseFloat(cleaned) || 0;
+};
+
+// Fonction de calcul de Bénéfice
+const calculateProfit = (total: number): number => {
+  const profit = (total - FIXED_COST) * PROFIT_MARGIN;
+  return Math.max(0, profit); 
+};
+
+// --- Composant Principal ---
 export default function Dashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
-  const [orders, setOrders] = useState([]);
+  // CORRECTION 2 : Spécifier que orders est un tableau d'objets Order
+  const [orders, setOrders] = useState<Order[]>([]); 
   const [selectedStatus, setSelectedStatus] = useState('all');
-  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null); 
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [lastSync, setLastSync] = useState(null);
-  const [syncError, setSyncError] = useState(null);
+  const [lastSync, setLastSync] = useState<Date | null>(null); 
+  const [syncError, setSyncError] = useState<string | null>(null); 
 
-  // Charger l'authentification au démarrage
+  // Charger l'authentification
   useEffect(() => {
     const authStatus = localStorage.getItem(AUTH_KEY);
     if (authStatus === 'true') {
@@ -38,52 +82,44 @@ export default function Dashboard() {
     }
   }, []);
 
-  // Fonction pour parser le CSV
-  const parseCSV = (csvText: string) => {
+  // Fonction de parsing CSV (CORRECTION 3 : Déclarer le type de retour Order[])
+  const parseCSV = (csvText: string): Order[] => {
     const lines = csvText.split('\n').filter(line => line.trim());
-    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-    
-    const parsedOrders = [];
-    
+    if (lines.length <= 1) return [];
+
+    const savedStatuses = JSON.parse(localStorage.getItem(STATUS_KEY) || '{}');
+    const parsedOrders: Order[] = []; 
+
     for (let i = 1; i < lines.length; i++) {
-      const values = [];
-      let current = '';
-      let insideQuotes = false;
-      
-      for (let char of lines[i]) {
-        if (char === '"') {
-          insideQuotes = !insideQuotes;
-        } else if (char === ',' && !insideQuotes) {
-          values.push(current.trim().replace(/"/g, ''));
-          current = '';
-        } else {
-          current += char;
+        // Utilisation d'une regex pour gérer les valeurs entre guillemets contenant des virgules
+        const values = lines[i].match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || [];
+        const cleanValues = values.map(v => v.trim().replace(/^"|"$/g, ''));
+        
+        if (cleanValues.length >= 13 && cleanValues[1]) {
+            const total = cleanAndParseTotal(cleanValues[11]);
+            const orderId = cleanValues[1];
+
+            const order: Order = { // Assigne explicitement le type Order
+                id: orderId,
+                timestamp: cleanValues[0],
+                customerName: cleanValues[2],
+                email: cleanValues[3],
+                phone: cleanValues[4],
+                address: cleanValues[5],
+                product: cleanValues[6],
+                quantity: parseInt(cleanValues[7]) || 1,
+                color: cleanValues[8],
+                material: cleanValues[9],
+                delivery: cleanValues[10],
+                total: total, 
+                paymentMethod: cleanValues[12],
+                status: savedStatuses[orderId] || 'pending',
+                profit: calculateProfit(total) // Calcul du profit
+            };
+            parsedOrders.push(order);
         }
-      }
-      values.push(current.trim().replace(/"/g, ''));
-      
-      if (values.length >= 13 && values[1]) {
-        const order = {
-          id: values[1],
-          timestamp: values[0],
-          customerName: values[2],
-          email: values[3],
-          phone: values[4],
-          address: values[5],
-          product: values[6],
-          quantity: parseInt(values[7]) || 1,
-          color: values[8],
-          material: values[9],
-          delivery: values[10],
-          total: values[11],
-          paymentMethod: values[12],
-          status: 'pending'
-        };
-        parsedOrders.push(order);
-      }
     }
-    
-    return parsedOrders;
+    return parsedOrders.reverse();
   };
 
   // Fonction pour charger les données depuis Google Sheets
@@ -92,7 +128,6 @@ export default function Dashboard() {
     setSyncError(null);
     
     try {
-      // Méthode alternative avec CORS proxy
       const response = await fetch(SHEET_CSV_URL);
       
       if (!response.ok) {
@@ -101,42 +136,28 @@ export default function Dashboard() {
       
       const csvText = await response.text();
       
-      // Vérifier que nous avons bien reçu des données
-      if (!csvText || csvText.trim().length === 0) {
-        throw new Error('Aucune donnée reçue du Google Sheet');
+      if (!csvText || csvText.trim().length < 100) { 
+        throw new Error('Aucune donnée reçue ou fichier vide.');
       }
       
       const newOrders = parseCSV(csvText);
       
       if (newOrders.length === 0) {
-        throw new Error('Aucune commande trouvée dans le Google Sheet');
+        throw new Error('Aucune commande trouvée ou format CSV invalide.');
       }
       
-      // Récupérer les statuts sauvegardés
-      const savedStatuses = JSON.parse(localStorage.getItem(STATUS_KEY) || '{}');
-      
-      // Appliquer les statuts sauvegardés
-      const ordersWithStatus = newOrders.map(order => ({
-        ...order,
-        status: savedStatuses[order.id] || 'pending'
-      }));
-      
-      setOrders(ordersWithStatus);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(ordersWithStatus));
+      setOrders(newOrders);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newOrders)); 
       setLastSync(new Date());
       
-      console.log(`✅ ${newOrders.length} commandes chargées avec succès`);
-      
-    } catch (error) {
+    } catch (error: any) { 
       console.error('Erreur de synchronisation:', error);
-      setSyncError(`Erreur: ${error.message}. Vérifiez que le Google Sheet est publié sur le web.`);
+      setSyncError(`Erreur: ${error.message}. Vérifiez la publication du Google Sheet.`);
       
-      // Charger depuis localStorage en cas d'erreur
       const savedOrders = localStorage.getItem(STORAGE_KEY);
       if (savedOrders) {
-        const parsed = JSON.parse(savedOrders);
-        setOrders(parsed);
-        console.log(`📦 ${parsed.length} commandes chargées depuis le cache local`);
+        setOrders(JSON.parse(savedOrders));
+        console.log(`📦 Commandes chargées depuis le cache local`);
       }
     } finally {
       setIsLoading(false);
@@ -146,13 +167,13 @@ export default function Dashboard() {
   // Charger les données au montage et toutes les 2 minutes
   useEffect(() => {
     if (isAuthenticated) {
-      loadFromGoogleSheets();
-      const interval = setInterval(loadFromGoogleSheets, 120000); // 2 minutes
+      loadFromGoogleSheets(); 
+      const interval = setInterval(loadFromGoogleSheets, 120000); 
       return () => clearInterval(interval);
     }
   }, [isAuthenticated]);
 
-  const handleLogin = (e) => {
+  const handleLogin = (e: React.FormEvent) => { 
     e.preventDefault();
     if (password === SECRET_PASSWORD) {
       setIsAuthenticated(true);
@@ -168,40 +189,40 @@ export default function Dashboard() {
     setPassword('');
   };
 
-  const updateOrderStatus = (orderId, newStatus) => {
-    const updatedOrders = orders.map(order => 
+  const updateOrderStatus = (orderId: string, newStatus: string) => { 
+    const updatedOrders = orders.map(order => 
       order.id === orderId ? { ...order, status: newStatus } : order
     );
     
     setOrders(updatedOrders);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedOrders));
     
-    // Sauvegarder le statut séparément
     const savedStatuses = JSON.parse(localStorage.getItem(STATUS_KEY) || '{}');
     savedStatuses[orderId] = newStatus;
     localStorage.setItem(STATUS_KEY, JSON.stringify(savedStatuses));
   };
 
-  const filteredOrders = orders.filter(order => {
+  const filteredOrders = useMemo(() => orders.filter(order => {
     const matchesStatus = selectedStatus === 'all' || order.status === selectedStatus;
     const matchesSearch = order.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         order.product.toLowerCase().includes(searchTerm.toLowerCase());
+                          order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          order.product.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesStatus && matchesSearch;
-  });
+  }), [orders, selectedStatus, searchTerm]);
 
-  const getStatusCounts = () => {
-    return statuses.reduce((acc, status) => {
+  const stats = useMemo(() => {
+    const counts = statuses.reduce((acc, status) => {
       acc[status.id] = orders.filter(o => o.status === status.id).length;
       return acc;
-    }, {});
-  };
+    }, {} as Record<string, number>); 
+    
+    const totalOrders = orders.length;
+    const totalRevenue = orders.reduce((sum, order) => sum + order.total, 0);
+    const totalProfit = orders.reduce((sum, order) => sum + order.profit, 0);
 
-  const statusCounts = getStatusCounts();
-  const totalOrders = orders.length;
-  const totalRevenue = orders.reduce((sum, order) => {
-    return sum + parseFloat(order.total.replace('€', '').replace(',', '.').trim());
-  }, 0);
+    return { counts, totalOrders, totalRevenue, totalProfit };
+  }, [orders]);
+
 
   if (!isAuthenticated) {
     return (
@@ -216,9 +237,7 @@ export default function Dashboard() {
           </div>
           <div className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Mot de passe
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Mot de passe</label>
               <input
                 type="password"
                 value={password}
@@ -244,6 +263,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
       <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
+        {/* Sidebar Header */}
         <div className="p-6 border-b border-gray-200">
           <div className="flex items-center space-x-3">
             <div className="bg-gradient-to-r from-blue-600 to-purple-600 w-10 h-10 rounded-lg flex items-center justify-center">
@@ -256,6 +276,7 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Sidebar Navigation */}
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
           <button
             onClick={() => setSelectedStatus('all')}
@@ -263,8 +284,8 @@ export default function Dashboard() {
               selectedStatus === 'all' ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-50'
             }`}
           >
-            <span className="font-medium">Toutes</span>
-            <span className="bg-gray-200 px-2 py-1 rounded-full text-xs font-semibold">{totalOrders}</span>
+            <span className="font-medium">Toutes les commandes</span>
+            <span className="bg-gray-200 px-2 py-1 rounded-full text-xs font-semibold">{stats.totalOrders}</span>
           </button>
 
           {statuses.map(status => {
@@ -282,13 +303,14 @@ export default function Dashboard() {
                   <span className="text-sm font-medium">{status.label}</span>
                 </div>
                 <span className="bg-gray-200 px-2 py-1 rounded-full text-xs font-semibold">
-                  {statusCounts[status.id] || 0}
+                  {stats.counts[status.id] || 0}
                 </span>
               </button>
             );
           })}
         </nav>
 
+        {/* Sync/Logout */}
         <div className="p-4 border-t border-gray-200 space-y-2">
           {lastSync && (
             <p className="text-xs text-gray-500 text-center">
@@ -335,19 +357,26 @@ export default function Dashboard() {
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-4 text-white">
-              <p className="text-sm opacity-90">Total Commandes</p>
-              <p className="text-3xl font-bold mt-1">{totalOrders}</p>
-            </div>
-            <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-4 text-white">
-              <p className="text-sm opacity-90">Chiffre d'affaires</p>
-              <p className="text-3xl font-bold mt-1">{totalRevenue.toFixed(2)}€</p>
-            </div>
-            <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-4 text-white">
-              <p className="text-sm opacity-90">En production</p>
-              <p className="text-3xl font-bold mt-1">{statusCounts.in_production || 0}</p>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <StatCard 
+                title="Total Commandes" 
+                value={stats.totalOrders} 
+                icon={Package} 
+                color="blue"
+            />
+            <StatCard 
+                title="Chiffre d'affaires" 
+                value={`${stats.totalRevenue.toFixed(2)}€`} 
+                icon={DollarSign} 
+                color="green"
+            />
+            <StatCard 
+                title="Bénéfice Net" 
+                value={`${stats.totalProfit.toFixed(2)}€`} 
+                icon={TrendingUp} 
+                color="purple"
+                subtitle="(T-3€) x 50%"
+            />
           </div>
         </header>
 
@@ -388,7 +417,10 @@ export default function Dashboard() {
                   </div>
 
                   <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                    <span className="text-lg font-bold text-gray-800">{order.total}</span>
+                    <div>
+                        <span className="text-lg font-bold text-gray-800">{order.total.toFixed(2)}€</span>
+                        <p className="text-xs font-semibold text-green-600">Bénéfice: {order.profit.toFixed(2)}€</p>
+                    </div>
                     <span className="text-xs text-gray-500">{order.timestamp.split(' ')[0]}</span>
                   </div>
                 </div>
@@ -416,58 +448,29 @@ export default function Dashboard() {
 
             <div className="p-6 space-y-6">
               {/* Client Info */}
-              <div>
-                <h3 className="font-semibold text-gray-800 mb-3 flex items-center">
-                  <User className="w-5 h-5 mr-2 text-blue-600" />
-                  Informations Client
-                </h3>
-                <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                  <p className="text-gray-700"><strong>Nom:</strong> {selectedOrder.customerName}</p>
-                  <p className="text-gray-700 flex items-center">
-                    <Mail className="w-4 h-4 mr-2 text-gray-500" />
-                    {selectedOrder.email}
-                  </p>
-                  <p className="text-gray-700 flex items-center">
-                    <Phone className="w-4 h-4 mr-2 text-gray-500" />
-                    {selectedOrder.phone}
-                  </p>
-                  <p className="text-gray-700 flex items-center">
-                    <MapPin className="w-4 h-4 mr-2 text-gray-500" />
-                    {selectedOrder.address}
-                  </p>
-                </div>
-              </div>
+              <DetailSection title="Informations Client" icon={User}>
+                <p className="text-gray-700"><strong>Nom:</strong> {selectedOrder.customerName}</p>
+                <DetailItem icon={Mail} value={selectedOrder.email} />
+                <DetailItem icon={Phone} value={selectedOrder.phone} />
+                <DetailItem icon={MapPin} value={selectedOrder.address} />
+              </DetailSection>
 
               {/* Product Info */}
-              <div>
-                <h3 className="font-semibold text-gray-800 mb-3 flex items-center">
-                  <Package className="w-5 h-5 mr-2 text-blue-600" />
-                  Détails du Produit
-                </h3>
-                <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                  <p className="text-gray-700"><strong>Produit:</strong> {selectedOrder.product}</p>
-                  <p className="text-gray-700"><strong>Quantité:</strong> {selectedOrder.quantity}</p>
-                  <p className="text-gray-700"><strong>Couleur:</strong> {selectedOrder.color}</p>
-                  <p className="text-gray-700"><strong>Matière:</strong> {selectedOrder.material}</p>
-                  <p className="text-gray-700"><strong>Livraison:</strong> {selectedOrder.delivery}</p>
-                </div>
-              </div>
+              <DetailSection title="Détails du Produit" icon={Package}>
+                <p className="text-gray-700"><strong>Produit:</strong> {selectedOrder.product}</p>
+                <p className="text-gray-700"><strong>Quantité:</strong> {selectedOrder.quantity}</p>
+                <p className="text-gray-700"><strong>Couleur:</strong> {selectedOrder.color}</p>
+                <p className="text-gray-700"><strong>Matière:</strong> {selectedOrder.material}</p>
+                <p className="text-gray-700"><strong>Livraison:</strong> {selectedOrder.delivery}</p>
+              </DetailSection>
 
               {/* Payment Info */}
-              <div>
-                <h3 className="font-semibold text-gray-800 mb-3 flex items-center">
-                  <CreditCard className="w-5 h-5 mr-2 text-blue-600" />
-                  Paiement
-                </h3>
-                <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                  <p className="text-gray-700"><strong>Total:</strong> <span className="text-2xl font-bold text-green-600">{selectedOrder.total}</span></p>
-                  <p className="text-gray-700"><strong>Mode:</strong> {selectedOrder.paymentMethod}</p>
-                  <p className="text-gray-700 flex items-center">
-                    <Calendar className="w-4 h-4 mr-2 text-gray-500" />
-                    {selectedOrder.timestamp}
-                  </p>
-                </div>
-              </div>
+              <DetailSection title="Paiement & Rentabilité" icon={CreditCard}>
+                <p className="text-gray-700"><strong>Total Payé:</strong> <span className="text-2xl font-bold text-green-600">{selectedOrder.total.toFixed(2)}€</span></p>
+                <p className="text-gray-700"><strong>Bénéfice Net:</strong> <span className="text-xl font-bold text-purple-600">{selectedOrder.profit.toFixed(2)}€</span></p>
+                <p className="text-gray-700"><strong>Mode:</strong> {selectedOrder.paymentMethod}</p>
+                <DetailItem icon={Calendar} value={selectedOrder.timestamp} />
+              </DetailSection>
 
               {/* Status Update */}
               <div>
@@ -510,4 +513,48 @@ export default function Dashboard() {
       )}
     </div>
   );
+}
+
+// --- SOUS-COMPOSANTS ---
+
+function StatCard({ title, value, icon: Icon, color, subtitle }: { title: string, value: string | number, icon: React.ElementType, color: string, subtitle?: string }) {
+    const colorClasses: Record<string, string> = {
+        blue: "from-blue-500 to-blue-600",
+        green: "from-green-500 to-green-600",
+        purple: "from-purple-500 to-purple-600",
+    };
+    
+    return (
+        <div className={`bg-gradient-to-br ${colorClasses[color]} rounded-xl p-4 text-white shadow-lg`}>
+            <div className="flex justify-between items-start mb-1">
+                <p className="text-sm opacity-90">{title}</p>
+                <Icon className="w-5 h-5 opacity-80" />
+            </div>
+            <p className="text-3xl font-bold mt-1">{value}</p>
+            {subtitle && <p className="text-xs opacity-70 mt-1">{subtitle}</p>}
+        </div>
+    );
+}
+
+function DetailSection({ title, icon: Icon, children }: { title: string, icon: React.ElementType, children: React.ReactNode }) {
+    return (
+        <div>
+            <h3 className="font-semibold text-gray-800 mb-3 flex items-center">
+                <Icon className="w-5 h-5 mr-2 text-blue-600" />
+                {title}
+            </h3>
+            <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                {children}
+            </div>
+        </div>
+    );
+}
+
+function DetailItem({ icon: Icon, value }: { icon: React.ElementType, value: string }) {
+    return (
+        <p className="text-gray-700 flex items-center">
+            <Icon className="w-4 h-4 mr-2 text-gray-500 shrink-0" />
+            {value}
+        </p>
+    );
 }

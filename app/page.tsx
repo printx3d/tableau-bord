@@ -11,10 +11,6 @@ const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRcYQCI6W
 
 const STORAGE_KEY = 'print3d_orders';
 const STATUS_KEY = 'print3d_status';
-const AUTH_KEY = 'print3d_auth';
-
-// IMPORTANT : Maintenant lu via process.env.NEXT_PUBLIC_DASHBOARD_PASSWORD
-const SECRET_PASSWORD = process.env.NEXT_PUBLIC_DASHBOARD_PASSWORD; 
 
 // COÛT FIXE ET BÉNÉFICE MARGE
 const FIXED_COST = 3.00;
@@ -71,8 +67,7 @@ const calculateProfit = (total: number): number => {
 
 // --- Composant Principal ---
 export default function Dashboard() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [password, setPassword] = useState('');
+  // Suppression des états d'authentification
   const [orders, setOrders] = useState<Order[]>([]); 
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null); 
@@ -80,14 +75,6 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [lastSync, setLastSync] = useState<Date | null>(null); 
   const [syncError, setSyncError] = useState<string | null>(null); 
-
-  // Charger l'authentification
-  useEffect(() => {
-    const authStatus = localStorage.getItem(AUTH_KEY);
-    if (authStatus === 'true') {
-      setIsAuthenticated(true);
-    }
-  }, []);
 
   // Fonction de parsing CSV
   const parseCSV = (csvText: string): Order[] => {
@@ -173,31 +160,15 @@ export default function Dashboard() {
   };
 
   // Chargement initial et intervalle
+  // Lancement du chargement sans condition d'authentification
   useEffect(() => {
-    if (isAuthenticated) {
-      loadFromGoogleSheets(); 
-      const interval = setInterval(loadFromGoogleSheets, 120000); 
-      return () => clearInterval(interval);
-    }
-  }, [isAuthenticated]);
+    loadFromGoogleSheets(); 
+    const interval = setInterval(loadFromGoogleSheets, 120000); 
+    return () => clearInterval(interval);
+  }, []);
 
-  const handleLogin = (e: React.FormEvent) => { 
-    e.preventDefault();
-    // Le mot de passe est lu ici depuis la variable d'environnement Vercel/Next.js
-    if (password === SECRET_PASSWORD) {
-      setIsAuthenticated(true);
-      localStorage.setItem(AUTH_KEY, 'true');
-    } else {
-      alert('Mot de passe incorrect');
-    }
-  };
-
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-    localStorage.removeItem(AUTH_KEY);
-    setPassword('');
-  };
-
+  // Suppression des fonctions handleLogin et handleLogout
+  // Le tableau de bord est toujours affiché.
   const updateOrderStatus = (orderId: string, newStatus: string) => { 
     const updatedOrders = orders.map(order => 
       order.id === orderId ? { ...order, status: newStatus } : order
@@ -234,54 +205,20 @@ export default function Dashboard() {
   }, [orders]);
 
 
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
-          <div className="text-center mb-8">
-            <div className="bg-gradient-to-r from-blue-600 to-purple-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Package className="w-8 h-8 text-white" />
-            </div>
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">Print3D Dashboard</h1>
-            <p className="text-gray-600">Gestion des Commandes E-commerce</p>
-          </div>
-          <div className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Mot de passe</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleLogin(e)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Entrez le mot de passe"
-              />
-            </div>
-            <button
-              onClick={handleLogin}
-              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all transform hover:scale-105"
-            >
-              Se connecter
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Suppression du bloc if (!isAuthenticated) { return ... }
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
       <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
         
-        {/* NOUVELLE SECTION : Graphique des Statuts (Affiché seulement si totalOrders > 0) */}
+        {/* Graphique des Statuts */}
         {stats.totalOrders > 0 && (
             <div className="p-4 border-b border-gray-200">
                 <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center space-x-2">
                     <TrendingUp className="w-4 h-4 text-purple-600" />
                     <span>Statut des Commandes ({stats.totalOrders})</span>
                 </h3>
-                {/* L'OrderCountChart masque maintenant les statuts avec un count de 0 */}
                 <OrderCountChart counts={stats.counts} statuses={statuses} totalOrders={stats.totalOrders} />
             </div>
         )}
@@ -335,12 +272,7 @@ export default function Dashboard() {
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             <span>{isLoading ? 'Synchro...' : 'Synchroniser'}</span>
           </button>
-          <button
-            onClick={handleLogout}
-            className="w-full bg-red-50 text-red-600 py-2 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium"
-          >
-            Déconnexion
-          </button>
+          {/* Le bouton de déconnexion est supprimé car il n'est plus pertinent */}
         </div>
       </div>
 
@@ -527,22 +459,19 @@ export default function Dashboard() {
 
 // --- SOUS-COMPOSANTS ---
 
-// Composant OrderCountChart modifié pour masquer les statuts avec un count de 0
 function OrderCountChart({ counts, statuses, totalOrders }: { counts: Record<string, number>, statuses: StatusItem[], totalOrders: number }) {
     if (totalOrders === 0) {
         return null; // Ne rend rien si le total est 0
     }
 
     const relevantStatuses = statuses.filter(status => counts[status.id] > 0);
-    const maxCount = Math.max(...relevantStatuses.map(status => counts[status.id]), 1); // Évite la division par zéro
+    const maxCount = Math.max(...relevantStatuses.map(status => counts[status.id]), 1); 
 
     return (
         <div className="space-y-3">
             {relevantStatuses.map(status => {
                 const count = counts[status.id];
-                // Calcul du pourcentage basé sur la commande la plus nombreuse (maxCount) pour la longueur de la barre
                 const percentage = (count / maxCount) * 100; 
-                // Calcul du pourcentage basé sur le total des commandes pour l'affichage
                 const displayPercentage = ((count / totalOrders) * 100).toFixed(0); 
                 
                 return (

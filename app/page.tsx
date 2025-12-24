@@ -152,7 +152,10 @@ function StatusPieChart({ counts, statuses }: { counts: Record<string, number>, 
     }
 
     return (
-        <div className="relative h-48 w-full flex items-center justify-center">
+        <div 
+            className="relative h-48 w-full flex items-center justify-center"
+            onClick={(e) => e.stopPropagation()} // <--- CORRECTION 1: Bloque le clic sur le graphique lui-même
+        >
             <Doughnut data={chartData} options={options} />
             <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
                 <p className="text-2xl font-bold text-gray-800">{chartData.datasets[0].data.reduce((a, b) => a + b, 0)}</p>
@@ -310,7 +313,10 @@ export default function Dashboard() {
             <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
 
                 {/* Graphique des Statuts (Nouveau composant Chart.js) */}
-                <div className="p-4 border-b border-gray-200">
+                <div 
+                    className="p-4 border-b border-gray-200"
+                    onClick={(e) => e.stopPropagation()} // <--- CORRECTION 2: Bloque le clic sur le conteneur du graphique
+                >
                     <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center space-x-2">
                         <TrendingUp className="w-4 h-4 text-purple-600" />
                         <span>Statut des Commandes</span>

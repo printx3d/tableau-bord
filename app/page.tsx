@@ -13,7 +13,7 @@ import { Doughnut } from 'react-chartjs-2';
 ChartJS.register(ArcElement, Tooltip, Legend);
 
 // --- CONFIGURATION ---
-const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRcYQCI6W3JQDsGT3Sn0P1n5r8tiOEsYrnT08kOxyW_ZsFZvT3DR5WeaUshn_1Qtp6lWuTsW4HpdWPf/pub?output=csv';
+const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRcYQCI6W3JQDsGT3Sn0P1n5r8tiOEsYrnT08kOxyW_ZsFZvT3DR5WeaUshn_1Qtp6lWuTsW4HpdWPj/pub?output=csv';
 
 const STORAGE_KEY = 'print3d_orders';
 const STATUS_KEY = 'print3d_status';

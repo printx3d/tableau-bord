@@ -596,4 +596,8 @@ function DetailItem({ icon: Icon, value }: { icon: React.ElementType, value: str
             {value}
         </p>
     );
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 1002484f6c44456f079fcfc44c476f706f324905

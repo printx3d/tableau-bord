@@ -552,9 +552,7 @@ export default function Dashboard() {
     );
 }
 
-// --- SOUS-COMPOSANTS (Non modifiés, sauf OrderCountChart, qui est supprimé car remplacé) ---
-
-// Supprimé: function OrderCountChart(...)
+// --- SOUS-COMPOSANTS ---
 
 function StatCard({ title, value, icon: Icon, color, subtitle }: { title: string, value: string | number, icon: React.ElementType, color: string, subtitle?: string }) {
     const colorClasses: Record<string, string> = {
@@ -596,8 +594,4 @@ function DetailItem({ icon: Icon, value }: { icon: React.ElementType, value: str
             {value}
         </p>
     );
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> 1002484f6c44456f079fcfc44c476f706f324905
